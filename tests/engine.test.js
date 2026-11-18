@@ -1,0 +1,11 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');const sandbox={};vm.runInNewContext(fs.readFileSync(__dirname+'/../engine.js','utf8'),sandbox);const e=sandbox.TetrisEngine;
+function result(label,fn){try{fn();console.log('PASS',label)}catch(err){console.error('FAIL',label,err);process.exitCode=1}}
+result('new game 10x20, seven tetrominoes',()=>{const g=e.create(0,()=>.0);assert.equal(g.grid.length,20);assert.equal(g.grid[0].length,10);assert.equal(Object.keys(e.SHAPES).length,7);assert.equal(g.level,0)})
+result('movement respects boundary',()=>{const g=e.create(0,()=>.0);for(let i=0;i<40;i++)e.shift(g,-1,0);assert.equal(e.shift(g,-1,0),false)})
+result('hard drop locks and creates next piece',()=>{const g=e.create(0,()=>.0);const result=e.drop(g,()=>.3);assert.equal(result.locked,true);assert.equal(g.pieces,1);assert.equal(g.status,'playing');assert.ok(g.grid.some(row=>row.some(Boolean)))})
+result('original-style points at level 0 after hard drop',()=>{const g=e.create(0,()=>.0);const r=e.drop(g,()=>.3);assert.equal(r.points,19);assert.equal(g.score,19)})
+result('level 5 adds fifteen points and hidden preview five',()=>{const g=e.create(5,()=>.0);g.preview=false;const r=e.drop(g,()=>.3);assert.equal(r.points,39)})
+result('gravity reduces piece score',()=>{const g=e.create(0,()=>.0);e.gravity(g,()=>.2);const r=e.drop(g,()=>.2);assert.equal(r.points,18)})
+result('line clearing retains 20-row board',()=>{const g=e.create(0,()=>.0);for(let x=0;x<10;x++)g.grid[19][x]=1;const a=g.active;g.grid[19][3]=g.grid[19][4]=g.grid[19][5]=g.grid[19][6]=0;g.active={type:'I',cells:[[0,0],[1,0],[2,0],[3,0]],x:3,y:19};const res=e.lock(g,()=>.0);assert.equal(res.cleared,1);assert.equal(g.lines,1);assert.equal(g.grid.length,20)})
+result('save restore and corrupt data rejection',()=>{const g=e.create(0,()=>.0);g.status='paused';let loaded=e.restore(e.snapshot(g));assert.equal(loaded.status,'paused');assert.equal(e.restore({version:2,grid:[]}),null)})
+result('rotation is counter-clockwise: vertical I becomes horizontal',()=>{const g=e.create(0,()=>.0);g.active={type:'I',cells:[[1,0],[1,1],[1,2],[1,3]],x:3,y:0};assert.equal(e.rotate(g),true);assert.equal(new Set(g.active.cells.map(v=>v[1])).size,1)})
