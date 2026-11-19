@@ -20,9 +20,40 @@ function pause(){if(!g||g.status!=='playing')return;g.status='paused';autoSave()
 function resume(){if(!g||g.status!=='paused')return;g.status='playing';dropMs=0;lastFrame=performance.now();audio.ensure();audio.startMusic();updateOverlay();updateHUD()}
 function updateOverlay(){const el=$('boardOverlay');if(!g||g.status==='playing'){el.hidden=true;return}el.hidden=false;$('overlayTitle').textContent=g.status==='over'?tr('gameOver'):tr('paused');$('overlayDetail').textContent=tr('score')+': '+g.score+' · '+tr('lines')+': '+g.lines;$('overlayButton').textContent=g.status==='over'?tr('playAgain'):tr('resume');$('overlayButton').dataset.action=g.status==='over'?'new':'resume'}
 function updateHUD(){if(!g)return;$('lines').textContent=g.lines;$('level').textContent=g.level;$('score').textContent=String(g.score%1000).padStart(3,'0');const thousands=Math.floor(g.score/1000);$('thousands').textContent=thousands? '¤'.repeat(Math.min(thousands,32))+(thousands>32?` +${thousands-32}`:''):'—';$('nextCanvas').style.visibility=g.preview?'visible':'hidden';$('legend').hidden=!g.legend;$('pauseButton').textContent=g.status==='paused'?tr('resume'):tr('pause');updateOverlay();drawNext()}
-function paintCell(ctx,x,y,s,color='#84ff4d'){const size=s,px=x*s,py=y*s;ctx.fillStyle='#061108';ctx.fillRect(px,py,size,size);ctx.fillStyle='#163d16';ctx.font=`${Math.floor(s*.53)}px monospace`;ctx.textBaseline='middle';ctx.textAlign='center';ctx.fillText('·',px+size/2,py+size/2);if(color){ctx.fillStyle=color;ctx.fillRect(px+2,py+3,size-4,size-6);ctx.fillStyle='#061608';ctx.fillRect(px+4,py+5,size-8,size-10);ctx.fillStyle=color;ctx.fillRect(px+6,py+7,size-12,size-14)}}
-function draw(){const canvas=$('board');if(!canvas||!g)return;const ctx=canvas.getContext('2d'),s=30;ctx.fillStyle='#041006';ctx.fillRect(0,0,300,600);for(let y=0;y<20;y++)for(let x=0;x<10;x++)paintCell(ctx,x,y,s,g.grid[y][x]?'#a1ff65':null);if(g.active)for(const [dx,dy]of g.active.cells){const x=g.active.x+dx,y=g.active.y+dy;if(y>=0&&y<20&&x>=0&&x<10)paintCell(ctx,x,y,s,'#a1ff65')}}
-function drawNext(){const canvas=$('nextCanvas'),ctx=canvas.getContext('2d');ctx.fillStyle='#041006';ctx.fillRect(0,0,128,128);if(!g||!g.preview)return;const cells=E.SHAPES[g.next];for(let y=0;y<4;y++)for(let x=0;x<4;x++){const filled=cells.some(([a,b])=>a===x&&b===y);if(filled){ctx.fillStyle='#9cff59';ctx.fillRect(x*28+8,y*28+8,24,24);ctx.fillStyle='#09200b';ctx.fillRect(x*28+13,y*28+13,14,14)}}}
+const ink = '#39cc24';
+function terminal(ctx, text, x, y, width) {
+  ctx.fillStyle = ink;
+  ctx.font = 'bold 27px monospace';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, x, y, width);
+}
+function draw() {
+  if (!g) return;
+  const ctx = $('board').getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, 300, 660);
+  const occupied = new Set();
+  if (g.active) for (const [dx, dy] of g.active.cells)
+    occupied.add((g.active.x + dx) + ',' + (g.active.y + dy));
+  for (let y = 0; y < 20; y++) {
+    const baseline = 15 + y * 30;
+    terminal(ctx, '<!', 12, baseline, 22);
+    terminal(ctx, '!>', 288, baseline, 22);
+    for (let x = 0; x < 10; x++) {
+      const filled = g.grid[y][x] || occupied.has(x + ',' + y);
+      terminal(ctx, filled ? '[]' : '·', 37.5 + 25*x, baseline, 24);
+    }
+  }
+  terminal(ctx, '<!' + '='.repeat(20) + '!>', 150, 615, 298);
+  terminal(ctx, String.fromCharCode(92, 47).repeat(10), 150, 645, 250);
+}
+function drawNext() {
+  const ctx = $('nextCanvas').getContext('2d');
+  ctx.clearRect(0, 0, 128, 128);
+  if (g && g.preview) for (const [x,y] of E.SHAPES[g.next])
+    terminal(ctx, '[]', 25 + x*25, 25 + y*30, 24);
+}
 function handleControl(c){if(!g||view!=='game'||g.status!=='playing')return;let result=null,moved=false;switch(c){case'left':moved=E.shift(g,-1,0);break;case'right':moved=E.shift(g,1,0);break;case'rotate':moved=E.rotate(g);break;case'soft':result=E.soft(g);moved=!!result.moved;break;case'drop':result=E.drop(g);break;case'speed':g.level=Math.min(30,g.level+1);dropMs=0;notify(tr('levelIncreased')+' '+g.level);audio.fx('menu');autoSave();break;case'preview':g.preview=!g.preview;autoSave();break;case'legend':g.legend=!g.legend;autoSave();break;}if(moved)audio.fx(c==='rotate'?'rotate':'move');if(result&&result.locked){audio.fx(result.cleared?'line':'drop');if(result.over)endRun();else autoSave()}updateHUD();draw()}
 function renderPanel(page){const title=page==='start'?tr('new'):page==='load'?tr('load'):page==='save'?tr('save'):tr(page);$('panelTitle').textContent=title;$('panel').dataset.page=page;let html='';if(page==='start'){html=`<p>${tr('startInfo')}</p><div class="picker"><label for="startLevel">${tr('startLevel')}</label><select id="startLevel">${Array.from({length:10},(_,i)=>`<option value="${i}">${i}</option>`).join('')}</select></div>${btn(tr('start'),'data-action="begin"')}`}
 else if(page==='load'||page==='save'){html=`<p class="mutedblock">${tr('localOnly')}</p><div class="slots">`;const keys=page==='load'?['auto','slot1','slot2','slot3','slot4']:['slot1','slot2','slot3','slot4'];keys.forEach((key,i)=>{const saved=store.get(key),isAuto=key==='auto';const label=isAuto?tr('loadFromAuto'):`${tr('slot')} ${i+(page==='load'?0:1)}`;const desc=saved&&saved.game?`${tr('score')}: ${saved.game.score} · ${tr('level')}: ${saved.game.level} · ${new Date(saved.date).toLocaleString(lang==='ru'?'ru-RU':'en-US')}`:tr('empty');html+=`<div class="slot"><div><b>${label}</b><small>${esc(desc)}</small></div><div>${page==='load'?btn(tr('slotLoad'),`data-action="slotload" data-slot="${key}" ${saved?'':'disabled'}`):btn(tr('slotSave'),`data-action="slotsave" data-slot="${key}"`)}${saved?btn(tr('slotDelete'),`data-action="slotdelete" data-slot="${key}"`):''}</div></div>`});html+='</div>';if(page==='save')html+=`<p class="mutedblock">${tr('autosaveInfo')}</p>`}
